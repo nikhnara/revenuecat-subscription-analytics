@@ -1,0 +1,229 @@
+version: 2
+
+models:
+  - name: int_transaction
+    description: >-
+      Grain: one original staging transaction row. KKBOX ordering-key ties
+      share a lifecycle event group without removing source rows. Cancellation
+      is an event, not automatic churn; first_observed_subscription is an
+      observation boundary, not necessarily true acquisition. No present-day
+      active or churned status is inferred. Rows with unresolved ordering inputs
+      remain available with quality and classification reasons.
+    columns:
+      - name: customer_id
+        description: Source customer identifier; missing IDs are preserved for audit.
+      - name: transaction_date
+        description: Parsed source date; undated source rows remain in this model.
+      - name: source_release
+        description: Raw transaction release provenance.
+      - name: recorded_amount_paid_ntd
+        description: Recorded source amount, not verified revenue or LTV.
+      - name: cancellation_flag
+        description: Source cancellation flag, separate from the derived lifecycle category.
+      - name: kkbox_plan_signature
+        description: Concatenated price, plan-days, and payment-method ordering key from the documented KKBOX convention.
+      - name: invalid_ordering_input_flag
+        description: One when inputs required for deterministic lifecycle ordering are missing or invalid.
+      - name: same_day_transaction_count
+        description: Number of source rows for this customer on this transaction date.
+      - name: ordering_group_sequence
+        description: Dense rank of source rows by the documented KKBOX ordering keys.
+      - name: event_group_sequence
+        description: Resolved lifecycle event-group sequence; NULL when group order is unresolved.
+      - name: event_group_source_row_count
+        description: Number of original transaction rows sharing this lifecycle event group.
+      - name: group_order_resolved_flag
+        description: One when the group's ordering inputs are sufficient.
+      - name: previous_renewal_reference_expiry_date
+        description: Renewal-gap reference expiry from the preceding ordered group.
+      - name: renewal_reference_expiry_after_event
+        description: Expiry reference after this group, including cancellation shortening where applicable.
+      - name: reported_expiry_after_event
+        description: Expiry reported by the final record in this event group; distinct from the renewal reference.
+      - name: days_from_previous_expiry
+        description: Calendar-day difference between transaction_date and the previous renewal reference expiry.
+      - name: classification_reason
+        description: Detailed reason for the row-level lifecycle classification or an unresolved state.
+      - name: event_type
+        description: Row-level category, including first_observed_subscription, renewal, late_renewal, reactivation, cancellation, or unclassified.
+      - name: reported_state_unknown_flag
+        description: One when the reported expiry after this event is unknown.
+      - name: renewal_reference_unknown_flag
+        description: One when the renewal reference after this event is unknown.
+      - name: ordering_key_tie_flag
+        description: One when multiple source rows share the resolved event-group ordering keys.
+      - name: expiry_before_transaction_flag
+        description: Observational source-quality flag; does not itself discard the row.
+      - name: cancellation_expiry_above_reference_flag
+        description: Observational quality flag for cancellation expiry above the prior renewal reference.
+
+  - name: int_customer_subscription_summary
+    description: >-
+      Grain: one row per customer with at least one source transaction row.
+      Counts distinguish raw records from ordered lifecycle event groups.
+      First observed subscription is not necessarily acquisition, cancellation
+      is not automatically churn, and latest observed event is not a present-day
+      active/churned state. Recorded amounts are not verified revenue or LTV.
+      Lifetime fields must not be summed after joining to a monthly grain.
+    columns:
+      - name: customer_id
+        description: Unique customer identifier for the observed transaction summary.
+        data_tests:
+          - not_null
+          - unique
+      - name: first_transaction_date
+        description: Earliest observed transaction date, not proven acquisition date.
+      - name: last_transaction_date
+        description: Latest observed transaction date, not a current-status timestamp.
+      - name: total_transaction_count
+        description: Count of original transaction records, including unresolved rows.
+      - name: observed_transaction_day_count
+        description: Count of distinct non-NULL transaction dates.
+      - name: cancellation_record_count
+        description: Count of raw source records marked as cancellations.
+      - name: unclassified_record_count
+        description: Count of source records without a resolved lifecycle event type.
+      - name: ordered_event_group_count
+        description: Count of ordered lifecycle groups, separate from transaction-row count.
+      - name: first_observed_subscription_event_group_count
+        description: Count of first-observed subscription event groups; not verified acquisitions.
+      - name: renewal_event_group_count
+        description: Count of renewal event groups.
+      - name: late_renewal_event_group_count
+        description: Count of late-renewal event groups.
+      - name: reactivation_event_group_count
+        description: Count of reactivation event groups.
+      - name: cancellation_event_group_count
+        description: Count of cancellation event groups; not a churn count.
+      - name: undated_transaction_count
+        description: Count of source transactions without a usable date.
+      - name: invalid_ordering_input_record_count
+        description: Count of source rows lacking valid ordering inputs.
+      - name: latest_event_type
+        description: Latest observed ordered event type when the tied source rows agree.
+      - name: latest_reported_expiry_date
+        description: Reported expiry after the latest observed ordered event group.
+      - name: latest_renewal_reference_expiry_date
+        description: Renewal-gap reference expiry after the latest observed ordered event group.
+      - name: latest_attribute_conflict_flag
+        description: One when non-ordering attributes conflict within the latest event group.
+      - name: missing_recorded_amount_count
+        description: Number of transaction rows with NULL recorded amount.
+      - name: observed_recorded_amount_paid_ntd
+        description: Complete observed sum of source-recorded amounts, or NULL if any component is missing; not verified revenue or LTV.
+      - name: observed_non_cancellation_recorded_amount_ntd
+        description: Complete observed amount for non-cancellation records, or NULL if any component is missing.
+      - name: observed_cancellation_recorded_amount_ntd
+        description: Complete observed amount for cancellation records, or NULL if any component is missing.
+
+  - name: int_customer_subscription_monthly
+    description: >-
+      Grain: one customer_id by observed transaction_month. Months without a
+      transaction are not generated here. Raw transaction-record counts and
+      distinct ordered lifecycle event-group counts have different grains.
+      Cancellation is not automatically churn; first observed subscription is
+      not necessarily acquisition. No monthly or present-day active/churned
+      state is inferred. Recorded amounts are not verified revenue or LTV.
+    columns:
+      - name: customer_id
+        description: Customer identifier for the observed transaction month.
+        data_tests:
+          - not_null
+      - name: transaction_month
+        description: First calendar day of a month with at least one dated transaction.
+        data_tests:
+          - not_null
+      - name: first_transaction_date_in_month
+        description: Earliest observed transaction date in this month.
+      - name: last_transaction_date_in_month
+        description: Latest observed transaction date in this month.
+      - name: transaction_record_count
+        description: Count of original dated transaction records in the month.
+      - name: transaction_day_count
+        description: Count of distinct observed transaction dates in the month.
+      - name: cancellation_record_count
+        description: Count of raw cancellation records, not churn events.
+      - name: unresolved_order_record_count
+        description: Number of dated source rows without a resolved event-group sequence.
+      - name: ordered_event_group_count
+        description: Number of resolved lifecycle event groups in the month.
+      - name: first_observed_subscription_event_count
+        description: Count of first-observed subscription groups, not proven acquisitions.
+      - name: renewal_event_count
+        description: Count of renewal event groups.
+      - name: late_renewal_event_count
+        description: Count of late-renewal event groups.
+      - name: reactivation_event_count
+        description: Count of reactivation event groups.
+      - name: cancellation_event_count
+        description: Count of cancellation event groups, not a churn count.
+      - name: unclassified_event_count
+        description: Count of ordered but unclassified event groups.
+      - name: missing_recorded_amount_count
+        description: Number of source rows with missing recorded amount.
+      - name: observed_recorded_amount_paid_ntd
+        description: Source-recorded amount sum, or NULL when incomplete; not verified revenue or LTV.
+      - name: latest_event_group_sequence
+        description: Ordering sequence of the latest resolved event in this month.
+      - name: latest_event_type
+        description: Type of the latest resolved event group in this month.
+      - name: latest_reported_expiry_date
+        description: Reported expiry following the latest event group in this month.
+      - name: latest_renewal_reference_expiry_date
+        description: Renewal-gap reference expiry following the latest event group in this month.
+      - name: attribute_conflict_event_count
+        description: Count of event groups with conflicting non-ordering source attributes.
+
+  - name: int_customer_engagement_monthly
+    description: >-
+      Grain: one customer_id by observed activity_month, including a possible
+      NULL activity_month for preserved invalid source dates. Presence counts
+      source log rows under the validated customer-day assumption. Daily
+      listening is valid only from 0 through 86,400 seconds inclusive. If any
+      contributing day is invalid, monthly listening metrics become NULL while
+      activity presence and invalid-day counts remain visible. num_unq is daily
+      unique songs, so the model exposes daily averages rather than a false
+      monthly distinct-song total.
+    columns:
+      - name: customer_id
+        description: Customer identifier for the observed activity month.
+        data_tests:
+          - not_null
+      - name: activity_month
+        description: First calendar day of observed activity; can be NULL for preserved invalid dates.
+      - name: first_observed_user_log_date
+        description: Earliest parsed activity date observed for this customer.
+      - name: first_observed_user_log_month
+        description: Earliest observed activity month; not necessarily first-ever use.
+      - name: engagement_month_number
+        description: Month number since first observed user-log month.
+      - name: previous_observed_activity_month
+        description: Previous month with an observed log row for this customer.
+      - name: inactive_months_since_previous_activity
+        description: Number of intervening calendar months without observed activity.
+      - name: active_days
+        description: Count of source daily log rows; relies on the validated customer-day grain.
+      - name: invalid_listening_day_count
+        description: Count of contributing log rows with NULL, negative, or over-86,400 listening seconds.
+      - name: invalid_play_day_count
+        description: Count of rows with missing or negative play-band counts.
+      - name: invalid_unique_song_day_count
+        description: Count of rows with missing or negative daily unique-song counts.
+      - name: listening_metrics_valid_flag
+        description: One only when every contributing daily listening value is valid.
+      - name: play_metrics_valid_flag
+        description: One only when every contributing daily play-band value is valid.
+      - name: unique_song_metrics_valid_flag
+        description: One only when every contributing daily unique-song value is valid.
+      - name: total_listening_seconds
+        description: Monthly sum when all contributing listening days are valid; otherwise NULL.
+      - name: avg_listening_seconds_per_active_day
+        description: Average across active days when all listening days are valid; otherwise NULL.
+      - name: total_plays
+        description: Monthly play count when all contributing play-count days are valid; otherwise NULL.
+      - name: avg_daily_unique_songs
+        description: Average of daily num_unq values when valid; not monthly distinct songs.
+      - name: plays_75_to_985_pct
+        description: Monthly plays in the 75–98.5 percent completion band when valid.
+      - name: source_release
+        description: Source user-log release associated with the activity month.

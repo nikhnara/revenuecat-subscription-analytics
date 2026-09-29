@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: >-
+      Grain: one source transaction row from transactions_v1 or transactions_v2.
+      The releases are unioned without deduplication. Parsed dates or amounts
+      can be NULL when source values are invalid; those rows remain observable.
+      A cancellation record is not automatically churn, and recorded amounts
+      are source observations rather than verified revenue or LTV.
+    columns:
+      - name: customer_id
+        description: KKBOX member identifier; source rows with a missing identifier are preserved.
+      - name: payment_method_id
+        description: Source payment method code used in KKBOX event ordering.
+      - name: plan_days
+        description: Safely cast source payment-plan duration in days.
+      - name: list_price_ntd
+        description: Safely cast listed plan price in New Taiwan dollars.
+      - name: recorded_amount_paid_ntd
+        description: Safely cast source-recorded paid amount in New Taiwan dollars; not verified revenue or LTV.
+      - name: auto_renew_flag
+        description: Safely cast source auto-renew indicator; source anomalies are retained.
+      - name: transaction_date
+        description: Safely parsed transaction date; NULL indicates an unparseable or missing source date.
+      - name: expiry_date
+        description: Safely parsed source membership expiry date.
+      - name: cancellation_flag
+        description: Source cancellation indicator; cancellation does not establish churn.
+      - name: source_release
+        description: Raw release provenance, v1 or v2.
+
+  - name: stg_members
+    description: >-
+      Grain: one source members row per customer_id. The model does not deduplicate
+      or infer subscription status. Invalid demographic values are retained in
+      raw fields and represented as NULL in cleaned fields.
+    columns:
+      - name: customer_id
+        description: KKBOX member identifier and expected unique key for the member profile.
+        data_tests:
+          - not_null
+          - unique
+      - name: city_code
+        description: Source city code; no geographic meaning is inferred here.
+      - name: age_raw
+        description: Original age value, including anomalous values.
+      - name: age_clean
+        description: Age only when age_raw is between 1 and 100; otherwise NULL.
+      - name: age_valid_flag
+        description: One when age_raw is between 1 and 100, otherwise zero.
+      - name: gender
+        description: Normalized male or female value; other source values become NULL.
+      - name: registration_channel_id
+        description: Source registered_via code.
+      - name: registration_channel_valid_flag
+        description: One when registration_channel_id is nonnegative, otherwise zero.
+      - name: registration_date
+        description: Safely parsed member registration date.
+      - name: registration_date_raw
+        description: Original registration date value, retained for audit.
+
+  - name: stg_user_logs
+    description: >-
+      Grain: one source user-log row, with customer-day as the already-validated
+      intended grain. The 410M-row daily table preserves both releases and
+      invalid dates; activity_date and activity_month may be NULL. A full-table
+      customer-day uniqueness test is deliberately deferred to Phase 3 source
+      diagnostics. num_unq measures unique songs within one day, not distinct
+      songs across a month.
+    columns:
+      - name: customer_id
+        description: KKBOX member identifier; not tested on this large daily table in Phase 2.
+      - name: activity_date
+        description: Safely parsed source log date; invalid dates remain NULL.
+      - name: activity_month
+        description: Calendar month of activity_date; NULL when the date is invalid.
+      - name: day_type
+        description: Weekend or weekday label; the current ELSE branch labels NULL activity_date as weekday, retained for later audit.
+      - name: plays_under_25_pct
+        description: Daily count of plays in the lowest completion band.
+      - name: plays_25_to_50_pct
+        description: Daily count of plays in the 25–50 percent completion band.
+      - name: plays_50_to_75_pct
+        description: Daily count of plays in the 50–75 percent completion band.
+      - name: plays_75_to_985_pct
+        description: Daily count of plays in the 75–98.5 percent completion band.
+      - name: plays_over_985_pct
+        description: Daily count of plays above the 98.5 percent completion threshold.
+      - name: unique_songs_played
+        description: Source num_unq, the count of unique songs within this day; not a monthly distinct count.
+      - name: total_listening_seconds
+        description: Source daily listening seconds; validity is assessed downstream as 0 through 86,400 inclusive.
+      - name: source_release
+        description: Raw release provenance, v1 or v2.

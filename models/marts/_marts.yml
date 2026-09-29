@@ -1,0 +1,167 @@
+version: 2
+
+models:
+  - name: mart_customer_month
+    description: >-
+      Grain: one customer_id by calendar_month within the modeled observation
+      window. The spine starts at first observed transaction or activity month
+      and ends at the shared source observation end. Inside that window, missing
+      engagement means zero observed engagement; it does not describe months
+      outside observable history. Invalid listening months retain engagement
+      presence while listening metrics remain NULL. Cancellation is not
+      automatically churn, first observed subscription is not necessarily
+      acquisition, and no present-day active/churned status is inferred.
+      Recorded amounts are not verified revenue or LTV. Lifetime fields repeat
+      on every customer-month row and are not additive across months.
+    columns:
+      - name: customer_id
+        description: Customer identifier in the observable monthly spine.
+        data_tests:
+          - not_null
+      - name: calendar_month
+        description: First calendar day of this customer-month; part of the unique grain.
+        data_tests:
+          - not_null
+      - name: first_observed_month
+        description: Earliest observed activity or transaction month, not necessarily acquisition.
+      - name: observation_end_month
+        description: Shared end month of transaction and engagement source coverage.
+      - name: customer_month_number
+        description: Month ordinal since first_observed_month.
+      - name: first_observed_month_flag
+        description: One in the first observed customer month.
+      - name: observation_end_month_flag
+        description: One at the common observation end.
+      - name: has_engagement_flag
+        description: One when an engagement monthly row exists for this customer-month.
+      - name: zero_engagement_flag
+        description: One when this observable customer-month has no engagement row; not an unobservable month.
+      - name: has_transaction_flag
+        description: One when a transaction monthly row exists in this month.
+      - name: has_member_profile_flag
+        description: One when a matching member profile exists.
+      - name: has_subscription_history_flag
+        description: One when the customer has any observed transaction history.
+      - name: registration_date
+        description: Parsed member registration date, which may be missing.
+      - name: age_clean
+        description: Member age only when the source age is between 1 and 100.
+      - name: active_days
+        description: Observed log-day count; zero for a modeled month with no engagement row.
+      - name: invalid_listening_day_count
+        description: Number of invalid contributing listening days, zero for no-engagement months.
+      - name: listening_metrics_valid_flag
+        description: One or zero for an engagement month; NULL when no engagement exists to validate.
+      - name: total_listening_seconds
+        description: Zero for no-engagement months; NULL when any contributing listening day is invalid; otherwise monthly total.
+      - name: avg_listening_seconds_per_active_day
+        description: Average for valid engagement months; NULL for invalid or no-engagement months.
+      - name: total_plays
+        description: Zero for no-engagement months; NULL when play counts are invalid.
+      - name: avg_daily_unique_songs
+        description: Mean daily num_unq, not a monthly distinct-song count.
+      - name: plays_75_to_985_pct
+        description: Monthly count in the 75–98.5 percent completion band when valid.
+      - name: transaction_record_count
+        description: Count of source transaction records in this month; zero when none exist.
+      - name: ordered_event_group_count
+        description: Count of ordered lifecycle event groups, distinct from source record count.
+      - name: first_observed_subscription_event_count
+        description: First-observed subscription groups; not verified acquisitions.
+      - name: renewal_event_count
+        description: Renewal event groups in this month.
+      - name: late_renewal_event_count
+        description: Late-renewal event groups in this month.
+      - name: reactivation_event_count
+        description: Reactivation event groups in this month.
+      - name: cancellation_event_count
+        description: Cancellation event groups in this month; not a churn count.
+      - name: unresolved_order_record_count
+        description: Dated transaction records lacking resolved event ordering.
+      - name: missing_recorded_amount_count
+        description: Transaction records with NULL recorded amount in this month.
+      - name: observed_recorded_amount_paid_ntd
+        description: Zero with no transaction, NULL if a recorded amount is missing, otherwise observed source sum; not revenue or LTV.
+      - name: latest_event_type
+        description: Latest ordered lifecycle event type within this calendar month, not present-day status.
+      - name: latest_reported_expiry_date
+        description: Reported expiry following the latest ordered event in this month.
+      - name: latest_renewal_reference_expiry_date
+        description: Renewal-gap reference expiry following the latest ordered event in this month.
+      - name: lifetime_first_transaction_date
+        description: First observed transaction date, repeated across customer-month rows; not proven acquisition.
+      - name: lifetime_transaction_record_count
+        description: Full observed transaction-row count, repeated across months and not additive across them.
+      - name: lifetime_cancellation_event_count
+        description: Full observed cancellation event-group count, repeated across months; not a churn count.
+      - name: ever_cancelled_flag
+        description: Whether any observed source record was marked cancellation; not current churn status.
+      - name: ever_reactivated_flag
+        description: Whether any observed lifecycle event was a reactivation.
+
+  - name: mart_lifecycle_event_engagement
+    description: >-
+      Grain: one customer_id by event_type by event_month by relative_month.
+      An event customer-month is represented once for each of -3, -2, -1, and
+      0, even when a behavior month is unobservable. Multiple same-type event
+      groups in one customer-month are summarized by event_count, which repeats
+      on all four relative rows and must not be summed across relative_month.
+      Relative month 0 can contain behavior both before and after the event.
+      balanced_panel_flag identifies event customer-months with all four months
+      inside the observable spine; use it as a selectable cohort-quality
+      control for like-for-like trajectories and left-censoring checks. Zero
+      engagement in an observable month differs from unobservable history.
+      Invalid listening days remain visible while listening metrics become NULL.
+      Cancellation is not automatically churn.
+    columns:
+      - name: event_customer_month_key
+        description: Stable key for customer_id, event_type, and event_month; repeats across four relative rows.
+      - name: event_relative_month_key
+        description: Unique key for one event customer-month and relative month.
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: Customer identifier for the lifecycle event customer-month.
+      - name: event_month
+        description: First day of the calendar month containing the lifecycle event.
+      - name: event_type
+        description: Lifecycle category in this mart; cancellation is an event, not an automatic churn label.
+      - name: event_count
+        description: Same-type lifecycle event groups within this customer-month; repeated on each relative row.
+      - name: relative_month
+        description: Month offset from event_month; -1 is the final complete month before the event month.
+      - name: relative_month_label
+        description: Human-readable label for relative_month; numeric relative_month remains canonical.
+      - name: expected_behavior_month
+        description: Calendar month at this relative offset, whether observed or not.
+      - name: behavior_month
+        description: Matching observable spine month; NULL when outside observable history.
+      - name: behavior_month_observable_flag
+        description: One when behavior_month exists in the customer-month spine; zero when unobservable.
+      - name: observable_relative_month_count
+        description: Number of the four event-relative months observable for this event customer-month.
+      - name: balanced_panel_flag
+        description: One when all four relative months are observable; a selectable left-censoring control, not an engagement requirement.
+      - name: has_engagement_flag
+        description: One for an observed engagement month, zero for observed no-engagement, NULL when unobservable.
+      - name: zero_engagement_flag
+        description: One for observable zero engagement, zero for observed engagement, NULL when unobservable.
+      - name: active_days
+        description: Observed activity-day count, including zero for observable no-engagement months; NULL when unobservable.
+      - name: invalid_listening_day_count
+        description: Count of invalid listening days in an observable month; NULL when unobservable.
+      - name: listening_metrics_valid_flag
+        description: One or zero in a month with engagement; NULL with no engagement or no observable month.
+      - name: total_listening_seconds
+        description: Zero for observable no-engagement; NULL for invalid listening or unobservable months.
+      - name: avg_listening_seconds_per_active_day
+        description: Average only where valid activity exists; NULL for invalid or absent engagement.
+      - name: total_plays
+        description: Monthly plays, zero for observable no-engagement and NULL for invalid or unobservable months.
+      - name: avg_daily_unique_songs
+        description: Mean daily num_unq within a behavior month, not a monthly distinct-song count.
+      - name: registration_date
+        description: Member registration date from the matched observable customer-month.
+      - name: age_clean
+        description: Member age when the source value passes the 1–100 validity rule.
