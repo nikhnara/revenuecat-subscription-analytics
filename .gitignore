@@ -1,0 +1,27 @@
+# dbt
+target/
+dbt_packages/
+logs/
+
+# credentials / local config
+profiles.yml
+.env
+.env.*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# raw data
+*.csv
+*.zip
+*.gz
+data/raw/
+.user.yml

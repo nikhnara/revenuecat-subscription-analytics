@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: kkbox_raw
+    database: revenuecats-poc-project
+    schema: kkbox_raw
+    tables:
+      - name: transactions_v1
+      - name: transactions_v2
+      - name: members
+      - name: user_logs_v1
+      - name: user_logs_v2
