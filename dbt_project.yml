@@ -1,5 +1,8 @@
 name: kkbox_revenuecat
 version: '0.1.0'
 config-version: 2
+
 profile: kkbox_revenuecat
+
 model-paths: ["models"]
+analysis-paths: ["analysis"]

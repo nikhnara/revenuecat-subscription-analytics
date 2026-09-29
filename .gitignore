@@ -7,6 +7,12 @@ logs/
 profiles.yml
 .env
 .env.*
+!.env.example
+*service*account*.json
+*credential*.json
+*.key
+*.pem
+*.p12
 
 # Python
 .venv/

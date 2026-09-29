@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: kkbox_raw
-    database: revenuecats-poc-project
+    database: "{{ env_var('DBT_KKBOX_RAW_PROJECT_ID', 'revenuecats-poc-project') }}"
     schema: kkbox_raw
     tables:
       - name: transactions_v1
